@@ -37,6 +37,13 @@ class Sign2pay_Payment_Model_Processor extends Mage_Payment_Model_Method_Abstrac
     public function performPayment(array $initial_response)
     {
         try{
+            // Load appropriate order
+            $orderId = Mage::getSingleton('checkout/session')->getLastRealOrderId();
+            $this->_order = Mage::getModel('sales/order')->loadByIncrementId($orderId);
+            if (!$this->_order->getId()) {
+                throw new Exception('Requested order with id ' . $orderId . ' does not exists.');
+            }
+
             $this->validateInitialResponse($initial_response);
             $token_response = json_decode($this->sendTokenExchangeRequest($initial_response), true);
                 if (empty($token_response['access_token']['token'])) {
@@ -59,7 +66,7 @@ class Sign2pay_Payment_Model_Processor extends Mage_Payment_Model_Method_Abstrac
         catch (Exception $e) {
             Mage::logException($e);
             Mage::getSingleton('checkout/session')->addError($e->getMessage());
-            
+
             $this->cancel();
             return Mage::app()->getResponse()->setRedirect('failure', array('_secure'=>true));
         }
@@ -174,15 +181,8 @@ class Sign2pay_Payment_Model_Processor extends Mage_Payment_Model_Method_Abstrac
     {
         $this->_request = $request;
 
-        $orderId = Mage::getSingleton('checkout/session')->getLastRealOrderId();
         $purchaseId = $this->getRequestData('purchase_id');
         Mage::getSingleton('checkout/session')->setPurchaseId($purchaseId);
-
-        // Load appropriate order
-        $this->_order = Mage::getModel('sales/order')->loadByIncrementId($orderId);
-        if (!$this->_order->getId()) {
-            throw new Exception('Requested order with id ' . $orderId . ' does not exists.');
-        }
 
         if ($this->_verifyResponse($purchaseId)) {
             // Payment was successful, so update the order's state
@@ -191,8 +191,6 @@ class Sign2pay_Payment_Model_Processor extends Mage_Payment_Model_Method_Abstrac
             // Register the payment capture
             $this->_registerPaymentCapture();
         } else {
-            // Register the payment failure
-            $this->_registerPaymentFailure();
             throw new Exception('Sorry, but we could not process your payment at this time.');
         }
     }
@@ -271,36 +269,6 @@ class Sign2pay_Payment_Model_Processor extends Mage_Payment_Model_Method_Abstrac
             ->setIsCustomerNotified(true)
             ->save();
         }
-
-        return $this;
-    }
-
-    /**
-     * Treat failed payment as order cancellation
-     */
-    protected function _registerPaymentFailure()
-    {
-        $this->_order
-            ->registerCancellation(
-                Mage::helper('sign2pay')->__('There was a problem with Sign2pay payment.'),
-                false
-            )
-            ->save();
-
-        return $this;
-    }
-
-    /**
-     * Process denied payment notification
-     */
-    protected function _registerPaymentDenial()
-    {
-        $this->_order->getPayment()
-            ->setTransactionId($this->getRequestData('purchase_id'))
-            ->setNotificationResult(true)
-            ->setIsTransactionClosed(true)
-            ->registerPaymentReviewAction(Mage_Sales_Model_Order_Payment::REVIEW_ACTION_DENY, false);
-        $this->_order->save();
 
         return $this;
     }

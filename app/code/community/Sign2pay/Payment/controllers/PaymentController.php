@@ -64,23 +64,12 @@ class Sign2pay_Payment_PaymentController extends Mage_Core_Controller_Front_Acti
         $this->_redirect('checkout/onepage/success', array('_secure'=>true));
     }
 
-    /*
-     * Failure action after gateway response
-     */
-    public function failureAction()
-    {
-        $session = Mage::getSingleton('checkout/session');
-        $session->setQuoteId($session->getSign2payQuoteId(true));
-        Mage::getSingleton('checkout/session')->getQuote()->setIsActive(false)->save();
-        $this->_redirect('checkout/onepage/failure', array('_secure'=>true));
-    }
-
     /**
      * When a customer cancel payment from Sign2Pay or an error occurs.
      *
      * @todo This should be processed by the payment processor
      */
-    public function cancelAction()
+    public function failureAction()
     {
         $session = Mage::getSingleton('checkout/session');
         $session->setQuoteId($session->getSign2payQuoteId(true));
